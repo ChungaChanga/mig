@@ -2,7 +2,6 @@ package address
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -181,17 +180,16 @@ func migrateAddresses(legacyDB, newDB *sql.DB) error {
 				if addr.DefaultShipping == 1 {
 					addrType = "shipping"
 				}
-				meta := map[string]string{
-					"fullname": firstName + " " + lastName,
-				}
 
 				// Конвертируем в JSON
-				metaJson, err := json.Marshal(meta)
 				if err != nil {
 					log.Fatalf("Ошибка при создании JSON: %v", err)
 				}
 
-				batch = append(batch, email, addr.PostCode, addr.Country, addr.State, "", addr.City, addr.Address1, addr.Address2, metaJson, addrType)
+				residential := false
+				liftgate := false
+				batch = append(batch, email, addr.PostCode, addr.Country, addr.State, "",
+					addr.City, addr.Address1, addr.Address2, firstName, lastName, residential, liftgate, addrType)
 				count++
 			}
 		}
@@ -222,14 +220,15 @@ func migrateAddresses(legacyDB, newDB *sql.DB) error {
 func buildInsertQuery(count int) string {
 	values := []string{}
 	for i := 0; i < count; i++ {
-		j := i * 10
-		values = append(values, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)", j+1, j+2, j+3, j+4, j+5, j+6, j+7, j+8, j+9, j+10))
+		j := i * 13
+		values = append(values, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
+			j+1, j+2, j+3, j+4, j+5, j+6, j+7, j+8, j+9, j+10, j+11, j+12, j+13))
 	}
 	return fmt.Sprintf(`
         INSERT INTO customers_addresses_tmp (
             customer_email, postal_code, country_code,
             subdivision_code, subdivision_name, city_name,
-            address_line1, address_line2, meta, type
+            address_line1, address_line2, firstName, lastName, residential, liftgate, type
         ) VALUES %s
         ON CONFLICT (customer_email, postal_code, country_code, address_line1, address_line2)
         DO NOTHING`, strings.Join(values, ", "))

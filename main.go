@@ -5,8 +5,8 @@ import (
 	"os"
 
 	"github.com/joho/godotenv"
-	address "mig/adresses"
-	"mig/users"
+	"mig/address"
+	"mig/user"
 )
 
 func main() {
@@ -16,20 +16,23 @@ func main() {
 	}
 
 	if len(os.Args) < 2 {
-		log.Fatalf("Не указан аргумент. Используйте: 'users' или 'address'")
+		log.Fatalf("Не указан аргумент. Используйте: 'user' или 'address'")
 	}
 
 	arg := os.Args[1]
 
 	switch arg {
-	case "users":
+	case "user":
 		log.Println("Запуск миграции пользователей")
-		users.Migrate()
+		user.Migrate()
 	case "address":
 		log.Println("Запуск миграции адресов")
 		address.Migrate()
+	case "validate":
+		log.Println("Запуск валидации адресов")
+		address.Validate()
 	default:
-		log.Fatalf("Неизвестный аргумент: %s. Используйте: 'users' или 'address'", arg)
+		log.Fatalf("Неизвестный аргумент: %s. Используйте: 'user', 'address' или 'validate'", arg)
 	}
 
 	log.Println("Миграция завершена успешно")

@@ -7,48 +7,23 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strings"
+
+	"google.golang.org/grpc"
+	"mig/adapters"
+	"mig/address/model"
+	addressProto "mig/api/ausweis/proto/address"
 )
 
-// Mock структура для демонстрации AddressManagement
-type AddressManagement struct{}
+func Validate() {
+	conn, err := grpc.Dial("127.0.0.1:18881", grpc.WithInsecure())
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close()
 
-func (m *AddressManagement) AddShippingAddress(ctx context.Context, customerId int, address *ShippingAddress) error {
-	// Имитация вызова метода для работы с адресами доставки
-	fmt.Printf("Shipping address added for customer %d: %+v\n", customerId, address)
-	return nil // Вернуть nil для успешного выполнения
-}
-
-func (m *AddressManagement) AddBillingAddress(ctx context.Context, customerId int, address *BillingAddress) error {
-	// Имитация вызова метода для работы с биллинговыми адресами
-	fmt.Printf("Billing address added for customer %d: %+v\n", customerId, address)
-	return nil // Вернуть nil для успешного выполнения
-}
-
-// Структуры для адресов
-type ShippingAddress struct {
-	PostalCode      *string
-	CountryCode     string
-	SubdivisionCode *string
-	SubdivisionName *string
-	CityName        *string
-	AddressLine1    string
-	AddressLine2    *string
-	Fullname        string
-}
-
-type BillingAddress struct {
-	PostalCode      *string
-	CountryCode     string
-	SubdivisionCode *string
-	SubdivisionName *string
-	CityName        *string
-	AddressLine1    string
-	AddressLine2    *string
-	Fullname        string
-}
-
-func main() {
+	// Создаем реальный клиент, сгенерированный из .proto-файла
+	client := addressProto.NewAddressServiceClient(conn)
+	addressService := adapters.NewAddressService(client)
 	// Получить строку подключения из переменной окружения
 	dsn := os.Getenv("NEW_DL_DSN")
 	if dsn == "" {
@@ -63,12 +38,11 @@ func main() {
 	defer db.Close()
 
 	ctx := context.Background()
-	addressManagement := &AddressManagement{} // Ваш экземпляр AddressManagement
 
 	// Запрос для получения адресов со статусом 'wait'
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, customer_email, postal_code, country_code, subdivision_code, 
-			   subdivision_name, city_name, address_line1, address_line2, firstname, lastname, type 
+			   subdivision_name, city_name, address_line1, address_line2, firstname, lastname, residential, liftgate, type 
 		FROM customers_addresses_tmp
 		WHERE status = 'wait'
 	`)
@@ -90,17 +64,21 @@ func main() {
 			subdivisionName sql.NullString
 			cityName        sql.NullString
 			addressLine2    sql.NullString
-			firstname       sql.NullString
-			lastname        sql.NullString
+			firstname       string
+			lastname        string
+			fullname        string
+			residential     bool
+			liftgate        bool
 		)
 
 		// Чтение одной строки
 		if err := rows.Scan(&id, &customerEmail, &postalCode, &countryCode, &subdivisionCode,
-			&subdivisionName, &cityName, &addressLine1, &addressLine2, &firstname, &lastname, &addressType); err != nil {
+			&subdivisionName, &cityName, &addressLine1, &addressLine2,
+			&firstname, &lastname, &residential, &liftgate, &addressType); err != nil {
 			log.Printf("Ошибка чтения строки: %v", err)
 			continue
 		}
-
+		fullname = firstname + " " + lastname
 		// Получение customer_id из таблицы customers
 		var customerId int
 		err := db.QueryRowContext(ctx, `
@@ -117,34 +95,43 @@ func main() {
 			continue
 		}
 
-		fullname := strings.TrimSpace(fmt.Sprintf("%s %s", firstname.String, lastname.String))
 		var addressError error
 
 		// Добавление адреса в зависимости от типа
 		if addressType == "shipping" {
-			shippingAddress := &ShippingAddress{
-				PostalCode:      nullStringPointer(postalCode),
-				CountryCode:     countryCode,
-				SubdivisionCode: nullStringPointer(subdivisionCode),
-				SubdivisionName: nullStringPointer(subdivisionName),
-				CityName:        nullStringPointer(cityName),
-				AddressLine1:    addressLine1,
-				AddressLine2:    nullStringPointer(addressLine2),
+			shippingAddress := &model.ShippingAddress{
+				Address: model.Address{
+					Id:              0,
+					CustomerId:      customerId,
+					PostalCode:      nullStringPointer(postalCode),
+					CountryCode:     countryCode,
+					SubdivisionCode: nullStringPointer(subdivisionCode),
+					SubdivisionName: nullStringPointer(subdivisionName),
+					CityName:        *nullStringPointer(cityName),
+					AddressLine1:    addressLine1,
+					AddressLine2:    nullStringPointer(addressLine2),
+				},
 				Fullname:        fullname,
+				IsResidential:   residential,
+				RequestLiftgate: liftgate,
 			}
-			addressError = addressManagement.AddShippingAddress(ctx, customerId, shippingAddress)
+			addressError = addressService.CreateShippingAddress(ctx, customerId, shippingAddress)
 		} else if addressType == "billing" {
-			billingAddress := &BillingAddress{
-				PostalCode:      nullStringPointer(postalCode),
-				CountryCode:     countryCode,
-				SubdivisionCode: nullStringPointer(subdivisionCode),
-				SubdivisionName: nullStringPointer(subdivisionName),
-				CityName:        nullStringPointer(cityName),
-				AddressLine1:    addressLine1,
-				AddressLine2:    nullStringPointer(addressLine2),
-				Fullname:        fullname,
+			billingAddress := &model.BillingAddress{
+				Address: model.Address{
+					Id:              0,
+					CustomerId:      customerId,
+					PostalCode:      nullStringPointer(postalCode),
+					CountryCode:     countryCode,
+					SubdivisionCode: nullStringPointer(subdivisionCode),
+					SubdivisionName: nullStringPointer(subdivisionName),
+					CityName:        *nullStringPointer(cityName),
+					AddressLine1:    addressLine1,
+					AddressLine2:    nullStringPointer(addressLine2),
+				},
+				Fullname: fullname,
 			}
-			addressError = addressManagement.AddBillingAddress(ctx, customerId, billingAddress)
+			addressError = addressService.CreateBillingAddress(ctx, customerId, billingAddress)
 		} else {
 			addressError = fmt.Errorf("неизвестный тип адреса: %s", addressType)
 		}

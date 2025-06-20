@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	"google.golang.org/grpc"
 	"mig/adapters"
@@ -94,7 +95,7 @@ func Validate() {
 			updateStatus(ctx, db, id, "error", err.Error())
 			continue
 		}
-
+		var addrId int
 		var addressError error
 
 		// Добавление адреса в зависимости от типа
@@ -115,7 +116,7 @@ func Validate() {
 				IsResidential:   residential,
 				RequestLiftgate: liftgate,
 			}
-			addressError = addressService.CreateShippingAddress(ctx, customerId, shippingAddress)
+			addrId, addressError = addressService.CreateShippingAddress(ctx, customerId, shippingAddress)
 		} else if addressType == "billing" {
 			billingAddress := &model.BillingAddress{
 				Address: model.Address{
@@ -131,7 +132,7 @@ func Validate() {
 				},
 				Fullname: fullname,
 			}
-			addressError = addressService.CreateBillingAddress(ctx, customerId, billingAddress)
+			addrId, addressError = addressService.CreateBillingAddress(ctx, customerId, billingAddress)
 		} else {
 			addressError = fmt.Errorf("неизвестный тип адреса: %s", addressType)
 		}
@@ -143,7 +144,7 @@ func Validate() {
 		}
 
 		// Успешно добавлено
-		updateStatus(ctx, db, id, "done", "")
+		updateStatus(ctx, db, id, "done", strconv.Itoa(addrId))
 	}
 
 	// Проверка ошибок завершения обработчика строк

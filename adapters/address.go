@@ -17,20 +17,26 @@ type addressService struct {
 	client addressProto.AddressServiceClient
 }
 
-func (s *addressService) CreateBillingAddress(ctx context.Context, customerId int, address *model.BillingAddress) error {
-	_, err := s.client.CreateBillingAddress(ctx, &addressProto.BillingAddressRequest{
+func (s *addressService) CreateBillingAddress(ctx context.Context, customerId int, address *model.BillingAddress) (int, error) {
+	addr, err := s.client.CreateBillingAddress(ctx, &addressProto.BillingAddressRequest{
 		CustomerId: int64(customerId),
 		Address:    toBillingProto(address),
 	})
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return int(addr.Id), err
 }
 
-func (s *addressService) CreateShippingAddress(ctx context.Context, customerId int, address *model.ShippingAddress) error {
-	_, err := s.client.CreateShippingAddress(ctx, &addressProto.ShippingAddressRequest{
+func (s *addressService) CreateShippingAddress(ctx context.Context, customerId int, address *model.ShippingAddress) (int, error) {
+	addr, err := s.client.CreateShippingAddress(ctx, &addressProto.ShippingAddressRequest{
 		CustomerId: int64(customerId),
 		Address:    toShippingProto(address),
 	})
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return int(addr.Id), err
 }
 
 func toShippingProto(address *model.ShippingAddress) *addressProto.ShippingAddress {

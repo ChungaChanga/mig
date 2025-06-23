@@ -16,7 +16,7 @@ func main() {
 	}
 
 	if len(os.Args) < 2 {
-		log.Fatalf("Не указан аргумент. Используйте: 'user' или 'address'")
+		log.Fatalf("Не указан аргумент. Используйте:  'user', 'address' или 'validate'")
 	}
 
 	arg := os.Args[1]

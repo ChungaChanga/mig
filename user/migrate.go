@@ -1,53 +1,65 @@
 package user
 
+/*
+устанавливаются дефолтные значения имен для юзеров без имен
+если телефон > 20 устанавливает в nil
+*/
 import (
 	"database/sql"
 	"fmt"
 	"log"
 	"os"
 	"strings"
+	"time"
+	"unicode/utf8"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 )
 
 const (
-	batchSize = 1000
+	batchSize        = 1000
+	defaultFirstName = ""
+	defaultLastName  = ""
 )
 
 type OldCustomer struct {
+	Id       int
 	Email    string
 	FullName *string
+	Company  *string
 	Phone    *string
 }
 
 func (o *OldCustomer) FirstName() string {
 	if o.FullName == nil || *o.FullName == "" {
-		return ""
+		return defaultFirstName
 	}
 	parts := strings.Fields(*o.FullName)
 	if len(parts) > 0 {
 		return parts[0] // Первый элемент — это имя
 	}
-	return ""
+	return defaultFirstName
 }
 
 func (o *OldCustomer) LastName() string {
 	if o.FullName == nil || *o.FullName == "" {
-		return ""
+		return defaultLastName
 	}
 	parts := strings.Fields(*o.FullName)
 	if len(parts) > 1 {
 		return strings.Join(parts[1:], " ") // Все, кроме первого элемента — это фамилия
 	}
-	return ""
+	return defaultLastName
 }
 
 type NewCustomer struct {
+	Id        int
 	Email     string
 	FirstName string
 	LastName  string
 	Phone     *string
+	Company   *string
 }
 
 func Migrate() {
@@ -87,6 +99,7 @@ func Migrate() {
 
 		offset += batchSize
 		log.Printf("Перенесено %d записей...", offset)
+		time.Sleep(1 * time.Second)
 	}
 }
 
@@ -94,9 +107,11 @@ func Migrate() {
 func fetchCustomers(mysqlDB *sql.DB, offset, limit int) ([]NewCustomer, error) {
 	query := `
 		SELECT 
+		    u.ID AS id,
 			u.user_email AS email,
 			(SELECT meta_value FROM wp_usermeta WHERE user_id = u.ID AND meta_key = 'full_name' LIMIT 1) AS fullname,
-			(SELECT meta_value FROM wp_usermeta WHERE user_id = u.ID AND meta_key = 'registered_user_phone' LIMIT 1) AS phone
+			(SELECT meta_value FROM wp_usermeta WHERE user_id = u.ID AND meta_key = 'registered_user_phone' LIMIT 1) AS phone,
+			(SELECT meta_value FROM wp_usermeta WHERE user_id = u.ID AND meta_key = 'company_name' LIMIT 1) AS company
 		FROM wp_users u
 		ORDER BY u.ID
 		LIMIT ? OFFSET ?;`
@@ -113,15 +128,25 @@ func fetchCustomers(mysqlDB *sql.DB, offset, limit int) ([]NewCustomer, error) {
 	for rows.Next() {
 		var oldCustomer OldCustomer
 
-		err := rows.Scan(&oldCustomer.Email, &oldCustomer.FullName, &oldCustomer.Phone)
+		err := rows.Scan(&oldCustomer.Id, &oldCustomer.Email, &oldCustomer.FullName, &oldCustomer.Phone, &oldCustomer.Company)
 		if err != nil {
 			return nil, fmt.Errorf("ошибка чтения строки: %w", err)
 		}
+
+		if oldCustomer.Phone != nil && utf8.RuneCountInString(*oldCustomer.Phone) > 20 {
+			oldCustomer.Phone = nil
+		}
+		if oldCustomer.Company != nil && utf8.RuneCountInString(*oldCustomer.Company) > 100 {
+			oldCustomer.Company = nil
+		}
+
 		newCustomer := NewCustomer{
+			Id:        oldCustomer.Id,
 			Email:     oldCustomer.Email,
 			FirstName: oldCustomer.FirstName(),
 			LastName:  oldCustomer.LastName(),
 			Phone:     oldCustomer.Phone,
+			Company:   oldCustomer.Company,
 		}
 		customers = append(customers, newCustomer)
 	}
@@ -137,19 +162,20 @@ func insertCustomers(postgresDB *sql.DB, customers []NewCustomer) error {
 
 	// SQL-запрос для вставки
 	query := `
-		INSERT INTO customers (email, firstname, lastname, phone)
+		INSERT INTO customers (id, email, firstname, lastname, phone, company)
 		VALUES %s
 		ON CONFLICT (email) DO NOTHING;
 	`
 
 	// Подготавливаем placeholders для батчевой вставки
 	placeholders := make([]string, len(customers))
-	values := make([]interface{}, 0, len(customers)*4)
+	fieldsCnt := 6
+	values := make([]interface{}, 0, len(customers)*fieldsCnt)
 
 	for i, customer := range customers {
-		placeholders[i] = fmt.Sprintf("($%d, $%d, $%d, $%d)",
-			i*4+1, i*4+2, i*4+3, i*4+4)
-		values = append(values, customer.Email, customer.FirstName, customer.LastName, customer.Phone)
+		placeholders[i] = fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d)",
+			i*fieldsCnt+1, i*fieldsCnt+2, i*fieldsCnt+3, i*fieldsCnt+4, i*fieldsCnt+5, i*fieldsCnt+6)
+		values = append(values, customer.Id, customer.Email, customer.FirstName, customer.LastName, customer.Phone, customer.Company)
 	}
 
 	// Формируем финальный SQL-запрос

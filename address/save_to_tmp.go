@@ -120,17 +120,37 @@ func Migrate() {
 
 // migrateAddresses выполняет миграцию данных из MySQL в PostgreSQL
 func migrateAddresses(legacyDB, newDB *sql.DB) error {
+	var err error
 	offset := 0
+	//todo нужно обновлять в каждой итерации?
+	query := `
+		create temporary table if not exists migration_users_addresses_criteria
+		select user_id from wp_usermeta where meta_key='reseller_certs'
+		union
+		SELECT DISTINCT meta_value as user_id
+		FROM wp_postmeta
+		WHERE meta_key = '_customer_user'
+		  AND post_id IN (
+			SELECT ID
+			FROM wp_posts
+			WHERE post_type = 'shop_order'
+			  AND post_date > DATE_SUB(NOW(), INTERVAL 1 YEAR)
+    );
+    `
+	_, err = legacyDB.Exec(query)
+	if err != nil {
+		log.Fatalf("Не удалось создать временную таблицу: %v", err)
+	}
 	for {
+		var rows *sql.Rows
 		// Получение пакета данных из LEGACY DL
 		log.Printf("Загрузка пакета данных. Offset: %d", offset)
-		rows, err := legacyDB.Query(`
-            SELECT wp_users.user_email, wp_usermeta.meta_value
-            FROM wp_users
-            JOIN wp_usermeta ON wp_users.ID = wp_usermeta.user_id
-            WHERE wp_usermeta.meta_key = '_dliquid_address_book'
-            AND wp_users.ID IN (select user_id from wp_usermeta where meta_key='reseller_certs')
-            ORDER BY wp_users.ID
+		rows, err = legacyDB.Query(`
+            SELECT wp_usermeta.user_id, wp_usermeta.meta_value
+			FROM wp_usermeta 
+			WHERE wp_usermeta.meta_key = '_dliquid_address_book' AND LENGTH(wp_usermeta.meta_value) > 20
+			  AND  wp_usermeta.user_id IN (select user_id from migration_users_addresses_criteria)
+			ORDER BY wp_usermeta.user_id
             LIMIT ? OFFSET ?`, batchSize, offset)
 		if err != nil {
 			return fmt.Errorf("Ошибка выполнения запроса к LEGACY DL: %v", err)
@@ -139,9 +159,9 @@ func migrateAddresses(legacyDB, newDB *sql.DB) error {
 		var batch []interface{}
 		count := 0
 		for rows.Next() {
-			var email string
+			var userId string
 			var metaValue string
-			err = rows.Scan(&email, &metaValue)
+			err = rows.Scan(&userId, &metaValue)
 			if err != nil {
 				return fmt.Errorf("Ошибка чтения строки: %v", err)
 			}
@@ -188,7 +208,7 @@ func migrateAddresses(legacyDB, newDB *sql.DB) error {
 
 				residential := false
 				liftgate := false
-				batch = append(batch, email, addr.PostCode, addr.Country, addr.State, "",
+				batch = append(batch, userId, addr.PostCode, addr.Country, addr.State, "",
 					addr.City, addr.Address1, addr.Address2, firstName, lastName, residential, liftgate, addrType)
 				count++
 			}
@@ -226,10 +246,11 @@ func buildInsertQuery(count int) string {
 	}
 	return fmt.Sprintf(`
         INSERT INTO customers_addresses_tmp (
-            customer_email, postal_code, country_code,
+            customer_id, postal_code, country_code,
             subdivision_code, subdivision_name, city_name,
             address_line1, address_line2, firstName, lastName, residential, liftgate, type
         ) VALUES %s
-        ON CONFLICT (customer_email, postal_code, country_code, address_line1, address_line2)
+        ON CONFLICT (customer_id, postal_code,
+  			city_name, country_code, subdivision_code, subdivision_name,  address_line1, address_line2)
         DO NOTHING`, strings.Join(values, ", "))
 }

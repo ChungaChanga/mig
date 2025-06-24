@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	batchSize        = 1000
+	batchSize        = 10000
 	defaultFirstName = ""
 	defaultLastName  = ""
 )
@@ -77,7 +77,7 @@ func Migrate() {
 	}
 	defer postgresDB.Close()
 
-	offset := 0
+	offset := 150000
 	for {
 		// Получение батча данных из MySQL
 		customers, err := fetchCustomers(mysqlDB, offset, batchSize)
@@ -139,12 +139,15 @@ func fetchCustomers(mysqlDB *sql.DB, offset, limit int) ([]NewCustomer, error) {
 		if oldCustomer.Company != nil && utf8.RuneCountInString(*oldCustomer.Company) > 100 {
 			oldCustomer.Company = nil
 		}
+		if utf8.RuneCountInString(oldCustomer.Email) > 100 {
+			continue
+		}
 
 		newCustomer := NewCustomer{
 			Id:        oldCustomer.Id,
 			Email:     oldCustomer.Email,
-			FirstName: oldCustomer.FirstName(),
-			LastName:  oldCustomer.LastName(),
+			FirstName: trimString(oldCustomer.FirstName(), 100),
+			LastName:  trimString(oldCustomer.LastName(), 100),
 			Phone:     oldCustomer.Phone,
 			Company:   oldCustomer.Company,
 		}
@@ -188,4 +191,13 @@ func insertCustomers(postgresDB *sql.DB, customers []NewCustomer) error {
 	}
 
 	return nil
+}
+
+func trimString(input string, limit int) string {
+	if utf8.RuneCountInString(input) > limit {
+		// Преобразуем строку в руны для корректной обрезки
+		runes := []rune(input)
+		return string(runes[:limit])
+	}
+	return input
 }

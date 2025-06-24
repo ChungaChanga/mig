@@ -16,7 +16,7 @@ func main() {
 	}
 
 	if len(os.Args) < 2 {
-		log.Fatalf("Не указан аргумент. Используйте:  'user', 'address' или 'validate'")
+		log.Fatalf("Не указан аргумент. Используйте:  'user', 'password', 'address' или 'validate'")
 	}
 
 	arg := os.Args[1]
@@ -25,6 +25,9 @@ func main() {
 	case "user":
 		log.Println("Запуск миграции пользователей")
 		user.Migrate()
+	case "password":
+		log.Println("Запуск миграции паролей пользователей")
+		user.MigratePasswords()
 	case "address":
 		log.Println("Запуск миграции адресов")
 		address.Migrate()
@@ -32,7 +35,7 @@ func main() {
 		log.Println("Запуск валидации адресов")
 		address.Validate()
 	default:
-		log.Fatalf("Неизвестный аргумент: %s. Используйте: 'user', 'address' или 'validate'", arg)
+		log.Fatalf("Неизвестный аргумент: %s. Используйте: 'user', 'password', 'address' или 'validate'", arg)
 	}
 
 	log.Println("Миграция завершена успешно")

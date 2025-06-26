@@ -15,7 +15,11 @@ import (
 )
 
 func Validate() {
-	conn, err := grpc.Dial("127.0.0.1:18881", grpc.WithInsecure())
+	ausweisSocket := os.Getenv("AUSWEIS_SOCKET")
+	if ausweisSocket == "" {
+		log.Fatal("Не указана переменная окружения AUSWEIS_SOCKET")
+	}
+	conn, err := grpc.Dial(ausweisSocket, grpc.WithInsecure())
 	if err != nil {
 		panic(err)
 	}

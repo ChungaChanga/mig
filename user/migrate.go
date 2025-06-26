@@ -77,7 +77,7 @@ func Migrate() {
 	}
 	defer postgresDB.Close()
 
-	offset := 150000
+	offset := 0
 	for {
 		// Получение батча данных из MySQL
 		customers, err := fetchCustomers(mysqlDB, offset, batchSize)

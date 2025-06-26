@@ -46,7 +46,6 @@ func convertMapToSlice(raw map[interface{}]interface{}) ([]Address, error) {
 			log.Printf("Пропускаем несоответствующий элемент: ключ=%s, значение=%v", key, value)
 			continue
 		}
-		log.Print(entry)
 		// Преобразуем карту в структуру Address
 		address := Address{
 			Address1:        getString(entry["address_1"]),
@@ -173,7 +172,6 @@ func migrateAddresses(legacyDB, newDB *sql.DB) error {
 			if err != nil {
 				log.Fatalf("Ошибка десериализации: %v", err)
 			}
-
 			// Обработать десериализованные данные
 			addresses, err := convertMapToSlice(rawData)
 			if err != nil {

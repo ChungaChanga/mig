@@ -3,7 +3,6 @@ package address
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -42,7 +41,7 @@ func Validate() {
 
 	// Запрос для получения адресов со статусом 'wait'
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, customer_email, postal_code, country_code, subdivision_code, 
+		SELECT id, customer_id, postal_code, country_code, subdivision_code, 
 			   subdivision_name, city_name, address_line1, address_line2, firstname, lastname, residential, liftgate, type 
 		FROM customers_addresses_tmp
 		WHERE status = 'wait'
@@ -56,7 +55,7 @@ func Validate() {
 	for rows.Next() {
 		var (
 			id              int
-			customerEmail   string
+			customerId      int
 			countryCode     string
 			addressLine1    string
 			addressType     string
@@ -73,7 +72,7 @@ func Validate() {
 		)
 
 		// Чтение одной строки
-		if err := rows.Scan(&id, &customerEmail, &postalCode, &countryCode, &subdivisionCode,
+		if err := rows.Scan(&id, &customerId, &postalCode, &countryCode, &subdivisionCode,
 			&subdivisionName, &cityName, &addressLine1, &addressLine2,
 			&firstname, &lastname, &residential, &liftgate, &addressType); err != nil {
 			log.Printf("Ошибка чтения строки: %v", err)
@@ -81,20 +80,7 @@ func Validate() {
 		}
 		fullname = firstname + " " + lastname
 		// Получение customer_id из таблицы customers
-		var customerId int
-		err := db.QueryRowContext(ctx, `
-			SELECT id 
-			FROM customers 
-			WHERE email = $1`, customerEmail).Scan(&customerId)
-		if errors.Is(err, sql.ErrNoRows) {
-			// Обновить статус и комментарий об ошибке
-			updateStatus(ctx, db, id, "error", "Клиент не найден")
-			continue
-		} else if err != nil {
-			log.Printf("Ошибка получения customer_id: %v", err)
-			updateStatus(ctx, db, id, "error", err.Error())
-			continue
-		}
+
 		var addrId int
 		var addressError error
 

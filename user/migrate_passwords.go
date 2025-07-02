@@ -65,12 +65,12 @@ func MigratePasswords() {
 // fetchCustomers выбирает пакет покупателей из MySQL
 func fetchPasswords(mysqlDB *sql.DB, offset, limit int) ([]Customer, error) {
 	query := `
-		SELECT u.ID AS id, u.user_pass AS password FROM wp_users u
+		SELECT u.ID AS id, u.user_pass AS password FROM wp_users u WHERE u.ID > ?
 		ORDER BY u.ID
 		LIMIT ? OFFSET ?;`
 
 	// Выполняем запрос с лимитом и смещением
-	rows, err := mysqlDB.Query(query, limit, offset)
+	rows, err := mysqlDB.Query(query, maxCustomerId, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("ошибка выполнения запроса: %w", err)
 	}

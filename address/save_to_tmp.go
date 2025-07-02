@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/elliotchance/phpserialize"
 	_ "github.com/go-sql-driver/mysql"
@@ -14,6 +15,7 @@ import (
 
 // Batch size for migration
 const batchSize = 100
+const maxCustomerId = 1187566
 
 type Address struct {
 	Address1        string `php:"address_1"`
@@ -148,9 +150,10 @@ func migrateAddresses(legacyDB, newDB *sql.DB) error {
             SELECT wp_usermeta.user_id, wp_usermeta.meta_value
 			FROM wp_usermeta 
 			WHERE wp_usermeta.meta_key = '_dliquid_address_book' AND LENGTH(wp_usermeta.meta_value) > 20
+			  AND  wp_usermeta.user_id > ?
 			  AND  wp_usermeta.user_id IN (select user_id from migration_users_addresses_criteria)
 			ORDER BY wp_usermeta.user_id
-            LIMIT ? OFFSET ?`, batchSize, offset)
+            LIMIT ? OFFSET ?`, maxCustomerId, batchSize, offset)
 		if err != nil {
 			return fmt.Errorf("Ошибка выполнения запроса к LEGACY DL: %v", err)
 		}
@@ -204,6 +207,16 @@ func migrateAddresses(legacyDB, newDB *sql.DB) error {
 					log.Fatalf("Ошибка при создании JSON: %v", err)
 				}
 
+				if utf8.RuneCountInString(addr.PostCode) > 100 ||
+					utf8.RuneCountInString(addr.Country) > 100 ||
+					utf8.RuneCountInString(addr.State) > 100 ||
+					utf8.RuneCountInString(addr.City) > 100 ||
+					utf8.RuneCountInString(addr.Address1) > 100 ||
+					utf8.RuneCountInString(addr.Address2) > 100 ||
+					utf8.RuneCountInString(firstName) > 100 ||
+					utf8.RuneCountInString(lastName) > 100 {
+					continue
+				}
 				residential := false
 				liftgate := false
 				batch = append(batch, userId, addr.PostCode, addr.Country, addr.State, "",
@@ -243,7 +256,7 @@ func buildInsertQuery(count int) string {
 			j+1, j+2, j+3, j+4, j+5, j+6, j+7, j+8, j+9, j+10, j+11, j+12, j+13))
 	}
 	return fmt.Sprintf(`
-        INSERT INTO customers_addresses_tmp (
+        INSERT INTO customers_addresses_tmp_diff1 (
             customer_id, postal_code, country_code,
             subdivision_code, subdivision_name, city_name,
             address_line1, address_line2, firstName, lastName, residential, liftgate, type

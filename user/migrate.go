@@ -21,6 +21,7 @@ const (
 	batchSize        = 10000
 	defaultFirstName = ""
 	defaultLastName  = ""
+	maxCustomerId    = 1187566
 )
 
 type OldCustomer struct {
@@ -112,12 +113,12 @@ func fetchCustomers(mysqlDB *sql.DB, offset, limit int) ([]NewCustomer, error) {
 			(SELECT meta_value FROM wp_usermeta WHERE user_id = u.ID AND meta_key = 'full_name' LIMIT 1) AS fullname,
 			(SELECT meta_value FROM wp_usermeta WHERE user_id = u.ID AND meta_key = 'registered_user_phone' LIMIT 1) AS phone,
 			(SELECT meta_value FROM wp_usermeta WHERE user_id = u.ID AND meta_key = 'company_name' LIMIT 1) AS company
-		FROM wp_users u
+		FROM wp_users u where u.ID > ?
 		ORDER BY u.ID
 		LIMIT ? OFFSET ?;`
 
 	// Выполняем запрос с лимитом и смещением
-	rows, err := mysqlDB.Query(query, limit, offset)
+	rows, err := mysqlDB.Query(query, maxCustomerId, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("ошибка выполнения запроса: %w", err)
 	}

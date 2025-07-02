@@ -1,3 +1,6 @@
 [submodule "api/ausweis/pb"]
 	path = api/ausweis/pb
 	url = git@gitlab.trgdev.com:gotrg/white-label/protocols/ausweis.git
+[submodule "api/media/pb1"]
+	path = api/media/pb1
+	url = git@gitlab.trgdev.com:gotrg/white-label/protocols/media.git

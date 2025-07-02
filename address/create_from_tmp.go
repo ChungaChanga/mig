@@ -47,7 +47,7 @@ func Validate() {
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, customer_id, postal_code, country_code, subdivision_code, 
 			   subdivision_name, city_name, address_line1, address_line2, firstname, lastname, residential, liftgate, type 
-		FROM customers_addresses_tmp
+		FROM customers_addresses_tmp_diff1
 		WHERE status = 'wait'
 	`)
 	if err != nil {
@@ -89,7 +89,7 @@ func Validate() {
 		var addressError error
 
 		// Добавление адреса в зависимости от типа
-		if addressType == "shipping" {
+		if addressType == "shipping" || addressType == "default" {
 			shippingAddress := &model.ShippingAddress{
 				Address: model.Address{
 					Id:              0,
@@ -146,7 +146,7 @@ func Validate() {
 // Функция для обновления статуса записи
 func updateStatus(ctx context.Context, db *sql.DB, id int, status, comment string) {
 	_, err := db.ExecContext(ctx, `
-		UPDATE customers_addresses_tmp
+		UPDATE customers_addresses_tmp_diff1
 		SET status = $1, status_comment = $2
 		WHERE id = $3
 	`, status, comment, id)
